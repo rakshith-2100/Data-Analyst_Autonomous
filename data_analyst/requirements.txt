@@ -2,4 +2,7 @@
 # Every implementation that needs a package adds it here in the SAME change.
 
 # ── core / logging ─────────────────────────────────────────────────────────
-# standard library only (logging, pathlib, datetime) — no external deps yet.
+# standard library only (logging, pathlib, datetime).
+
+# ── foundations: schemas, profiler ─────────────────────────────────────────
+pandas
