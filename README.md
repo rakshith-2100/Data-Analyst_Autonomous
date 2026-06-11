@@ -154,7 +154,7 @@ inventing the number.
 
 ---
 
-## 4. How prompts are structured (read this twice)
+## 4. How prompts are structured
 
 This is the core of the build. Every `[agent]` action follows the **same anatomy**, and
 the differences between actions are deliberate and small.
@@ -391,7 +391,7 @@ class State:
 
 ---
 
-## 7. Models (cost-first, non-Anthropic)
+## 7. Models
 
 The axis that matters is **tool-call / structured-output reliability**, not raw chat IQ.
 Prices move monthly — re-check before committing. (Figures: early–mid 2026.)
