@@ -391,21 +391,21 @@ class State:
 
 ---
 
-## 7. Models
+## 7. Models — OpenAI GPT
 
-The axis that matters is **tool-call / structured-output reliability**, not raw chat IQ.
-Prices move monthly — re-check before committing. (Figures: early–mid 2026.)
+We use **OpenAI GPT models** throughout. The axis that matters is **tool-call /
+structured-output reliability**, not raw chat IQ — every action returns strict JSON or a
+single code block, so reliable structured output is exactly what we're buying. Prices
+move — re-check before committing.
 
-| Tier | Model | ~Price /M (in/out) | Use for |
-|---|---|---|---|
-| cheap (default) | Gemini 2.5 / 3.1 Flash | ~$0.25–0.30 / $1.50 | everything; 1M context, fast, reliable |
-| cheapest | DeepSeek V3.2 | ~$0.14–0.28 / $0.28–0.42 | cost floor; keep a fallback (availability) |
-| reliable budget | GPT-4.1 nano/mini | ~$0.10 / $0.40 (nano) | if tool-calling reliability bites |
-| open / self-host | Qwen 3 Coder | pennies via Groq/Together | own the stack / avoid per-call billing |
+| Tier | Model | Use for |
+|---|---|---|
+| **cheap (default)** | `gpt-4.1-mini` (drop to `gpt-4.1-nano` for the trivial classify/plan calls) | everything by default — fast, cheap, reliable structured output |
+| **strong (escalation only)** | `gpt-4.1` (or a larger GPT) | only when a cheap model is provably stuck (same error after enriched retry) |
 
-Default everything to **Gemini Flash**. `ESCALATE` swaps to a stronger model only when a
-cheap model is provably stuck (same error after enriched retry). Don't build tiering
-until you feel the need.
+Default everything to the **cheap GPT tier**. `ESCALATE` swaps to the strong GPT model only
+when the cheap one is provably stuck. Don't build tiering until you feel the need — one
+client and one default model to start.
 
 ---
 

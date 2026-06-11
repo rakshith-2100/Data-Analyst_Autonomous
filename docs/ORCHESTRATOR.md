@@ -8,7 +8,8 @@ specific state name. All of that lives in `actions/`, `validators/`, and `transi
 > **Action** does the work · **Validation** judges the work · **Transition** decides where
 > to go next. The orchestrator only *sequences* those three and records what happened.
 
-Models stay **non-Anthropic** (default: Gemini Flash; `strong` tier only on escalation).
+Models are **OpenAI GPT** (default: the cheap GPT tier, e.g. `gpt-4.1-mini`; the `strong`
+tier, e.g. `gpt-4.1`, only on escalation).
 
 ---
 
@@ -41,7 +42,7 @@ class Ctx:
     profile: Profile                # source of truth for columns
     question: str                   # or task.instruction in the report/task paths
     sandbox: Sandbox                # PERSISTENT across turns in chat; FRESH per task in report
-    models: dict                    # {"cheap": GeminiFlash(...), "strong": <stronger model>}
+    models: dict                    # {"cheap": OpenAI("gpt-4.1-mini"), "strong": OpenAI("gpt-4.1")}
     summary: str = ""               # rolling chat summary — never the full history
     trace_path: str = ""            # traces/<session>.jsonl
     data: dict = field(default_factory=dict)   # scratch: last plan, last code, last verdict, ...
