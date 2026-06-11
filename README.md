@@ -58,12 +58,14 @@ csv-analyst/
       plan_step.py
       write_code.py
       execute.py               # [sys] plain code, no prompt
+      enrich.py                # [sys] build targeted error context, no prompt
       repair.py
       reduce.py
       check.py
       compose.py
       ask.py
       plan_report.py
+      refine_report.py
       dispatch.py              # [sys] fan-out, no prompt
       narrate.py
       assemble.py              # [sys] plain code, no prompt
@@ -106,7 +108,8 @@ the relevant transition table. Nothing else changes.
 
 ## 3. The state machine (router tables)
 
-`[agent]` = a prompt. `[sys]` = plain code, zero tokens. `tries` is a per-state counter.
+`[agent]` = a prompt. `[sys]` = plain code, zero tokens. Counters are **named per state**
+(`plan`/`code`/`repair`/`reduce`/`check`/`compose`); `N` = the repair cap.
 
 ### Chat path
 
@@ -115,14 +118,15 @@ the relevant transition table. Nothing else changes.
 | `CLASSIFY` | `[agent]` label the message | schema (enum) | question→`PLAN_STEP` · unclear→`ASK` · refine→`PLAN_REPORT` · oos→`RESPOND` |
 | `PLAN_STEP` | `[agent]` pick columns + op, 1-line plan, **no code** | planning | ok→`WRITE_CODE` · bad col & tries<2→`PLAN_STEP` · ambiguous→`ASK` |
 | `WRITE_CODE` | `[agent]` one code cell from the plan | syntax | compiles→`EXECUTE` · else & tries<2→`WRITE_CODE` |
-| `EXECUTE` | `[sys]` run in sandbox | runtime | clean→`CHECK` · exception→`REPAIR` · timeout→`REDUCE` |
-| `REPAIR` | `[agent]` fix from enriched traceback | syntax | tries<N→`EXECUTE` · else→`ESCALATE` |
-| `REDUCE` | `[agent]` rewrite to sample/chunk | planning | tries<2→`EXECUTE` · else→`ESCALATE` |
-| `CHECK` | `[agent]` does result answer the question? | sanity | yes→`COMPOSE` · no & tries<2→`PLAN_STEP` · else→`ESCALATE` |
-| `COMPOSE` | `[agent]` write the answer | grounding | grounded→`DELIVER` · else & tries<2→`COMPOSE` |
+| `EXECUTE` | `[sys]` run in sandbox | runtime (**classifies** `error_kind`+`signature`) | clean→`CHECK` · `signature==last`→`ESCALATE` · `RESOURCE` & reduce<2→`REDUCE` · other error & repair<N→`ENRICH` · repair≥N→`ESCALATE` |
+| `ENRICH` | `[sys]` build targeted context for the `error_kind` | — | →`REPAIR` |
+| `REPAIR` | `[agent]` fix using the enriched context **only** | syntax | compiles→`EXECUTE` (repair++) · won't compile & code<2→`REPAIR` · else→`ESCALATE` |
+| `REDUCE` | `[agent]` rewrite to sample/chunk | planning | ok & reduce<2→`EXECUTE` · else→`ESCALATE` |
+| `CHECK` | `[agent]` does result answer the question? | sanity | yes→`COMPOSE` · no & check<2→`PLAN_STEP` · else→`ESCALATE` |
+| `COMPOSE` | `[agent]` write the answer | grounding | grounded→`DELIVER` · else & compose<2→`COMPOSE` |
 | `ASK` | `[agent]` one clarifying question | schema | →wait→`CLASSIFY` |
 | `RESPOND` | `[agent]` short out-of-scope reply | — | →`DONE` |
-| `ESCALATE` | `[sys]` swap to strong model, or bail | — | budget→`EXECUTE` (strong) · else→`FAIL` |
+| `ESCALATE` | `[sys]` pick the next recovery rung | — | `esc=0`→`PLAN_STEP` (restrategize, esc→1) · `esc=1` & budget→`WRITE_CODE` (strong model, esc→2) · else→`FAIL` |
 | `DELIVER` | `[sys]` stream answer + charts | — | →`DONE`; next msg→`CLASSIFY` |
 | `FAIL` | `[sys]` honest "couldn't compute X" | — | →`DONE` |
 
@@ -130,15 +134,23 @@ the relevant transition table. Nothing else changes.
 
 | State | Action | Validation level | Transition (verdict → next) |
 |---|---|---|---|
-| `PLAN_REPORT` | `[agent]` checklist → task list | planning | ok→`DISPATCH` · else & tries<2→`PLAN_REPORT` |
-| `DISPATCH` | `[sys]` fan out; **each task runs `WRITE_CODE→EXECUTE→REPAIR→CHECK` in isolation** | all tasks terminal | all settled→`NARRATE` |
-| `NARRATE` | `[agent]` report prose from results | grounding | grounded→`ASSEMBLE` · else & tries<2→`NARRATE` |
+| `PLAN_REPORT` | `[agent]` checklist → **new** N tasks | planning | ok→`DISPATCH(all)` · else & tries<2→`PLAN_REPORT` |
+| `REFINE_REPORT` | `[agent]` NL edit + existing tasks → diff `{add,drop,keep}` | planning | ok→`DISPATCH(changed only)` · else & tries<2→`REFINE_REPORT` |
+| `DISPATCH` | `[sys]` fan out; each task runs `WRITE_CODE→EXECUTE→ENRICH→REPAIR→CHECK` in isolation; reuse cached results for `keep` | all tasks terminal (`DONE_TASK`/`FAILED_TASK`) | all settled→`NARRATE` |
+| `NARRATE` | `[agent]` prose from `{done, failed}` results | grounding | grounded→`ASSEMBLE` · else & tries<2→`NARRATE` |
 | `ASSEMBLE` | `[sys]` stitch prose + chart files | artifacts present | →`DELIVER` |
 
 **`PLAN_REPORT` mirrors `PLAN_STEP`** — same planning validation against the profile,
 same retry-on-bad-column. The only difference is it emits *N* task specs instead of
-one. After that, `DISPATCH` runs the **exact same** `WRITE_CODE → EXECUTE → REPAIR →
-CHECK` actions per task, just in parallel and stateless. One engine, two entry points.
+one. After that, `DISPATCH` runs the **exact same** `WRITE_CODE → EXECUTE → ENRICH →
+REPAIR → CHECK` actions per task, just in parallel and stateless. One engine, two entry points.
+
+**Refine is not rebuild.** A refine message ("drop the pie, add a forecast") routes to
+`REFINE_REPORT` (not `PLAN_REPORT`): it emits a `{add, drop, keep}` *diff* against the
+existing task list, and `DISPATCH` runs only the `add`ed tasks while **reusing cached
+results** for `keep`. Each task has two terminals — `DONE_TASK` or `FAILED_TASK` — so one
+failed task doesn't sink the report; `NARRATE` reports the gap honestly instead of
+inventing the number.
 
 ---
 
@@ -291,7 +303,16 @@ RULES:  One short section per task, using its result. Every number must be trace
 OUTPUT: markdown: a 2–3 sentence executive summary, then one section per task.
 ```
 
-`execute`, `dispatch`, `assemble` have **no prompt** — they are plain code.
+**REFINE_REPORT** — planning-validated, edits an existing report (mirrors PLAN_REPORT)
+```
+ROLE:   You translate a refine instruction into edits on an existing task list.
+INPUTS: profile, the current task list, the instruction ("drop the pie, add a forecast").
+RULES:  Output a diff, not a new report. Reuse existing task ids in drop/keep; only
+        genuinely new outputs go in add. Use ONLY profile columns.
+OUTPUT: {"add": [<task>...], "drop": [<task id>...], "keep": [<task id>...]}, nothing else.
+```
+
+`execute`, `enrich`, `dispatch`, `assemble` have **no prompt** — they are plain code.
 
 ---
 
@@ -305,7 +326,7 @@ that can actually catch its failure mode**. They climb from mechanical to semant
 | schema | `validators/schema.py` | free | output isn't the expected JSON shape / enum | `CLASSIFY`, `ASK` |
 | planning | `validators/planning.py` | free | references a column not in the profile | `PLAN_STEP`, `PLAN_REPORT`, `REDUCE` |
 | syntax | `validators/syntax.py` | free (`compile()`) | code won't parse / banned import | `WRITE_CODE`, `REPAIR` |
-| runtime | `validators/runtime.py` | free | raised an exception / hit timeout | `EXECUTE` |
+| runtime | `validators/runtime.py` | free | raised an exception / hit timeout; **classifies `error_kind` + `signature`** | `EXECUTE` |
 | sanity | `validators/sanity.py` | 1 model call | ran clean but answers the wrong question | `CHECK` |
 | grounding | `validators/grounding.py` | code or 1 model call | a stated number isn't in the results | `COMPOSE`, `NARRATE` |
 
@@ -356,12 +377,16 @@ class Verdict:
     ok: bool
     level: str               # which validation level produced this
     reason: str = ""
+    error_kind: str | None = None   # runtime only: MISSING_COLUMN|BAD_VALUE|NAME_OR_LOGIC|RESOURCE|OTHER
+    signature: str | None = None    # hash(error_type + "file:line") — detects "same error twice"
 
 @dataclass
 class State:
     name: str
     data: dict
-    tries: int = 0
+    counters: dict = field(default_factory=dict)  # named: plan/code/repair/reduce/check/compose
+    esc_level: int = 0       # escalation rung: 0 none · 1 restrategized · 2 strong model
+    tier: str = "cheap"      # cheap | strong  (ESCALATE may flip to strong)
 ```
 
 ---
