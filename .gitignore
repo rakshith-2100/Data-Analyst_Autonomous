@@ -16,6 +16,9 @@ data/
 # Per-session run traces (regenerated every run; can get large).
 traces/
 *.jsonl
+# Runtime logs (regenerated every run). Keep the folder structure, ignore contents.
+data_analyst/logs/*.log
+data_analyst/logs/prompts_response/*.log
 # Sandbox chart/artifact output.
 out/
 app/out/
