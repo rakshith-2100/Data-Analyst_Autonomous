@@ -1,0 +1,46 @@
+"""Action registry: NAME -> module. The orchestrator does ACTIONS[state.name].run(...)."""
+from . import (
+    classify,
+    plan_step,
+    write_code,
+    execute,
+    enrich,
+    repair,
+    reduce,
+    check,
+    compose,
+    ask,
+    respond,
+    escalate,
+    deliver,
+    fail,
+    plan_report,
+    refine_report,
+    dispatch,
+    narrate,
+    assemble,
+)
+
+_MODULES = [
+    classify,
+    plan_step,
+    write_code,
+    execute,
+    enrich,
+    repair,
+    reduce,
+    check,
+    compose,
+    ask,
+    respond,
+    escalate,
+    deliver,
+    fail,
+    plan_report,
+    refine_report,
+    dispatch,
+    narrate,
+    assemble,
+]
+
+ACTIONS = {m.NAME: m for m in _MODULES}
