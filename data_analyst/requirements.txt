@@ -6,3 +6,10 @@
 
 # ── foundations: schemas, profiler ─────────────────────────────────────────
 pandas
+
+# ── sandbox: run model code in a subprocess (charts via matplotlib) ─────────
+matplotlib
+
+# ── model layer: OpenAI GPT client ─────────────────────────────────────────
+openai>=1.0
+python-dotenv
