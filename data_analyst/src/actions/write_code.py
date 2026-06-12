@@ -32,8 +32,11 @@ def parse(raw):
 
 
 def run(state, ctx):
-    return agent_run(NAME, build_messages, parse, state, ctx,
+    code = agent_run(NAME, build_messages, parse, state, ctx,
                      model_tier=MODEL_TIER, json_mode=False)
+    if getattr(ctx, "data", None) is not None:
+        ctx.data["code"] = code  # the next EXECUTE runs this cell
+    return code
 
 
 def validate(output, ctx):

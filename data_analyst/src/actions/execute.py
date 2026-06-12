@@ -1,15 +1,22 @@
-"""EXECUTE [sys] — run the code cell in the sandbox -> ExecResult. Plain code, no model.
+"""EXECUTE [sys] — run the current code cell in the sandbox -> ExecResult. No model.
 
-Phase 4: implement. Stub for now.
+Reads ctx.data['code'], runs it in ctx.sandbox, stashes the result for the downstream
+ENRICH / REPAIR / CHECK actions, and returns the ExecResult. Validated at the runtime
+level (classify -> clean | error_kind | signature).
 """
+from __future__ import annotations
+
+from src.validators.runtime import classify
+
 NAME = "EXECUTE"
 
 
 def run(state, ctx):
-    """run the code cell in the sandbox -> ExecResult. Stub — returns None until Phase 4."""
-    return None
+    code = ctx.data.get("code", "")
+    result = ctx.sandbox.exec(code)
+    ctx.data["exec_result"] = result
+    return result
 
 
 def validate(output, ctx):
-    """Stub — returns None until Phase 4."""
-    return None
+    return classify(output)
