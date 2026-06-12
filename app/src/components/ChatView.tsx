@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChatMessage, Profile } from '../types'
-import { SUGGESTED_QUESTIONS, makeAssistantMessage, nextId } from '../mock'
+import { SUGGESTED_QUESTIONS, nextId } from '../mock'
+import { artifactUrl, sendChat } from '../api'
 import ProfileStrip from './ProfileStrip'
 import Chart from './Chart'
 
-export default function ChatView({ profile }: { profile: Profile }) {
+export default function ChatView({
+  profile,
+  sessionId,
+}: {
+  profile: Profile
+  sessionId: string
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -14,7 +21,7 @@ export default function ChatView({ profile }: { profile: Profile }) {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  function ask(question: string) {
+  async function ask(question: string) {
     const text = question.trim()
     if (!text || busy) return
     setInput('')
@@ -24,12 +31,25 @@ export default function ChatView({ profile }: { profile: Profile }) {
     const pending: ChatMessage = { id: nextId('msg'), role: 'assistant', text: '', pending: true }
     setMessages((m) => [...m, userMsg, pending])
 
-    // Fake the engine's compute-then-narrate latency.
-    setTimeout(() => {
-      const answer = makeAssistantMessage(text)
-      setMessages((m) => m.map((msg) => (msg.id === pending.id ? answer : msg)))
+    try {
+      const res = await sendChat(sessionId, text)
+      const reply: ChatMessage = {
+        id: pending.id,
+        role: 'assistant',
+        text: res.answer,
+        imageUrl: res.artifacts[0] ? artifactUrl(sessionId, res.artifacts[0]) : undefined,
+      }
+      setMessages((m) => m.map((msg) => (msg.id === pending.id ? reply : msg)))
+    } catch (e) {
+      const err: ChatMessage = {
+        id: pending.id,
+        role: 'assistant',
+        text: `⚠ ${(e as Error).message}. Is the backend running? (uvicorn src.api:app)`,
+      }
+      setMessages((m) => m.map((msg) => (msg.id === pending.id ? err : msg)))
+    } finally {
       setBusy(false)
-    }, 1100)
+    }
   }
 
   return (
@@ -58,6 +78,13 @@ export default function ChatView({ profile }: { profile: Profile }) {
               ) : (
                 <>
                   {m.text}
+                  {m.imageUrl && (
+                    <img
+                      src={m.imageUrl}
+                      alt="chart"
+                      style={{ maxWidth: '100%', borderRadius: 8, marginTop: 10, display: 'block' }}
+                    />
+                  )}
                   {m.chart && <Chart spec={m.chart} />}
                 </>
               )}

@@ -6,7 +6,7 @@ the profile (the guard against the model misremembering column names).
 """
 from __future__ import annotations
 
-from src.actions.base import agent_run, parse_json
+from src.actions.base import agent_run, convo_block, parse_json
 from src.prompts import load_prompt
 from src.validators.planning import validate_columns
 
@@ -16,7 +16,7 @@ MODEL_TIER = "cheap"
 
 def build_messages(ctx):
     profile_block = ctx.profile.as_prompt() if ctx.profile else "(no profile loaded)"
-    user = f"PROFILE:\n{profile_block}\n\nQUESTION:\n{ctx.question}"
+    user = f"PROFILE:\n{profile_block}{convo_block(ctx)}\n\nQUESTION:\n{ctx.question}"
     return [
         {"role": "system", "content": load_prompt("actions/plan_step")},
         {"role": "user", "content": user},

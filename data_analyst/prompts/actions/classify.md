@@ -18,6 +18,8 @@ Rules:
 - Choose EXACTLY one label.
 - Judge only from the PROFILE and the MESSAGE. Do not assume columns that aren't listed.
 - Keep "reason" to a short phrase.
+- Use CONVERSATION SO FAR (if present) to interpret follow-ups: a message that continues the
+  conversation (e.g. "now as a pie", "what about by gender?") is a "question".
 
 Output ONLY this JSON object, nothing else:
 {"label": "question|unclear|refine|out_of_scope", "reason": "<short>"}

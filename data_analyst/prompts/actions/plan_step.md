@@ -12,5 +12,8 @@ Rules:
 - If a column looks messy in the profile (e.g. flagged as needing cleaning), you may still
   name it — the cleaning happens when the code is written, not here.
 
+If the QUESTION is a follow-up (see CONVERSATION SO FAR), resolve what it refers to — e.g.
+"now as a pie" means re-plan the previous chart as a pie of the same data.
+
 Output ONLY this JSON object, nothing else:
 {"columns": ["..."], "operation": "<short>", "plan": "<one sentence>"}

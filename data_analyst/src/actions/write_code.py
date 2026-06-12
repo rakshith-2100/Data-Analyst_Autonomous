@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from src.actions.base import agent_run, extract_code
+from src.actions.base import agent_run, convo_block, extract_code
 from src.prompts import load_prompt
 from src.validators.syntax import validate_code
 
@@ -20,7 +20,10 @@ def build_messages(ctx):
     profile_block = ctx.profile.as_prompt() if ctx.profile else "(no profile loaded)"
     plan = ctx.data.get("plan") if getattr(ctx, "data", None) else None
     plan_block = json.dumps(plan, indent=2) if plan else "(no plan; infer from the question)"
-    user = f"PROFILE:\n{profile_block}\n\nQUESTION:\n{ctx.question}\n\nPLAN:\n{plan_block}"
+    prev = ctx.data.get("prev_code", "") if getattr(ctx, "data", None) else ""
+    prev_block = f"\n\nPREVIOUS CODE (adapt it if this is a follow-up):\n{prev}" if prev else ""
+    user = (f"PROFILE:\n{profile_block}{convo_block(ctx)}\n\nQUESTION:\n{ctx.question}"
+            f"\n\nPLAN:\n{plan_block}{prev_block}")
     return [
         {"role": "system", "content": load_prompt("actions/write_code")},
         {"role": "user", "content": user},

@@ -5,7 +5,7 @@ profile + the message. Validated at the schema level (label must be one of four 
 """
 from __future__ import annotations
 
-from src.actions.base import agent_run, parse_json
+from src.actions.base import agent_run, convo_block, parse_json
 from src.prompts import load_prompt
 from src.validators.schema import validate_enum
 
@@ -16,7 +16,7 @@ LABELS = {"question", "unclear", "refine", "out_of_scope"}
 
 def build_messages(ctx):
     profile_block = ctx.profile.as_prompt() if ctx.profile else "(no profile loaded)"
-    user = f"PROFILE:\n{profile_block}\n\nMESSAGE:\n{ctx.question}"
+    user = f"PROFILE:\n{profile_block}{convo_block(ctx)}\n\nCURRENT MESSAGE:\n{ctx.question}"
     return [
         {"role": "system", "content": load_prompt("actions/classify")},
         {"role": "user", "content": user},

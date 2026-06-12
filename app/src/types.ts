@@ -37,7 +37,8 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   text: string
-  chart?: ChartSpec
+  chart?: ChartSpec // structured chart (mock/report path)
+  imageUrl?: string // server-rendered chart PNG (matplotlib, from the backend)
   pending?: boolean // assistant message still "thinking"
 }
 

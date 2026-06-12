@@ -1,26 +1,23 @@
 import { useEffect, useState } from 'react'
 
 const STEPS = [
-  'Reading CSV…',
+  'Uploading CSV…',
   'Inferring column types…',
-  'Profiling 21 columns…',
-  'Flagging messy columns (TotalCharges)…',
+  'Profiling columns…',
+  'Flagging messy columns…',
   'Building data profile…',
 ]
 
-// Fakes the profiling pass with a stepped animation, then calls onDone.
-// In the real app this screen waits on profiler.py / the backend.
-export default function ProcessingScreen({ onDone }: { onDone: () => void }) {
+// Visual-only: animates the profiling steps while App awaits the backend.
+// App switches screens when the real upload + profile resolves.
+export default function ProcessingScreen() {
   const [step, setStep] = useState(0)
 
   useEffect(() => {
-    if (step >= STEPS.length) {
-      const t = setTimeout(onDone, 450)
-      return () => clearTimeout(t)
-    }
-    const t = setTimeout(() => setStep((s) => s + 1), 600)
+    if (step >= STEPS.length) return
+    const t = setTimeout(() => setStep((s) => s + 1), 500)
     return () => clearTimeout(t)
-  }, [step, onDone])
+  }, [step])
 
   const pct = Math.min((step / STEPS.length) * 100, 100)
 

@@ -16,4 +16,7 @@ Rules:
 - Do NOT import anything outside pandas, numpy, matplotlib (and you usually need no imports
   at all, since pd / np / plt are already available).
 
+If this is a follow-up (see CONVERSATION SO FAR / PREVIOUS CODE), adapt the previous code to
+the new request — e.g. change the chart type or grouping — keeping the rest the same.
+
 Output a single ```python code block and nothing else.

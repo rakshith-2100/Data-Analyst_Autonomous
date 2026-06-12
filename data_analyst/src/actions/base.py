@@ -39,3 +39,9 @@ def extract_code(raw: str) -> str:
     """Pull the first fenced code block from a model reply (or return the whole text)."""
     m = _CODE_BLOCK.search(raw)
     return (m.group(1) if m else raw).strip()
+
+
+def convo_block(ctx) -> str:
+    """Render the rolling conversation summary for follow-up context, or '' if none."""
+    summary = (getattr(ctx, "summary", "") or "").strip()
+    return f"\n\nCONVERSATION SO FAR (for follow-ups):\n{summary}" if summary else ""

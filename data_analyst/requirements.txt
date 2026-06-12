@@ -13,3 +13,9 @@ matplotlib
 # ── model layer: OpenAI GPT client ─────────────────────────────────────────
 openai>=1.0
 python-dotenv
+
+# ── server: FastAPI wrapper over the chat path ─────────────────────────────
+fastapi
+uvicorn[standard]
+python-multipart          # multipart CSV upload
+httpx                     # TestClient (and a handy HTTP client)

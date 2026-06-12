@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Profile, ReportSection, Screen } from './types'
-import { TELCO_PROFILE, buildReport } from './mock'
+import { buildReport } from './mock'
+import { createSampleSession, createSession } from './api'
 import UploadScreen from './components/UploadScreen'
 import ProcessingScreen from './components/ProcessingScreen'
 import ForkScreen from './components/ForkScreen'
@@ -9,23 +10,33 @@ import ReportBuilder from './components/ReportBuilder'
 import ReportView from './components/ReportView'
 
 // The whole prototype is a screen state machine — mirroring the backend's own
-// state-machine design. Each screen renders for one `Screen` value and calls a
-// handler to transition to the next.
+// state-machine design. Chat is wired to the real backend; the report fork is
+// still the local mock (the backend report path isn't built yet).
 export default function App() {
   const [screen, setScreen] = useState<Screen>('upload')
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const [sections, setSections] = useState<ReportSection[]>([])
 
   function reset() {
     setProfile(null)
+    setSessionId(null)
     setSections([])
     setScreen('upload')
   }
 
-  function loadFile(fileName: string) {
-    // Prototype always loads the Telco profile, but keeps the dropped file's name.
-    setProfile({ ...TELCO_PROFILE, fileName })
+  // Drive the real upload: show processing, await the backend, then fork.
+  async function openSession(loader: Promise<{ sessionId: string; profile: Profile }>) {
     setScreen('processing')
+    try {
+      const res = await loader
+      setSessionId(res.sessionId)
+      setProfile(res.profile)
+      setScreen('fork')
+    } catch (e) {
+      alert(`${(e as Error).message}\n\nIs the backend running?  (uvicorn src.api:app)`)
+      setScreen('upload')
+    }
   }
 
   const showBack = screen !== 'upload' && screen !== 'processing'
@@ -55,9 +66,14 @@ export default function App() {
         )}
       </div>
 
-      {screen === 'upload' && <UploadScreen onLoad={loadFile} />}
+      {screen === 'upload' && (
+        <UploadScreen
+          onUpload={(file) => openSession(createSession(file))}
+          onSample={() => openSession(createSampleSession())}
+        />
+      )}
 
-      {screen === 'processing' && <ProcessingScreen onDone={() => setScreen('fork')} />}
+      {screen === 'processing' && <ProcessingScreen />}
 
       {screen === 'fork' && profile && (
         <ForkScreen
@@ -67,7 +83,9 @@ export default function App() {
         />
       )}
 
-      {screen === 'chat' && profile && <ChatView profile={profile} />}
+      {screen === 'chat' && profile && sessionId && (
+        <ChatView profile={profile} sessionId={sessionId} />
+      )}
 
       {screen === 'report-builder' && profile && (
         <ReportBuilder
