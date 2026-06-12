@@ -30,3 +30,12 @@ def strip_fences(text: str) -> str:
 def parse_json(raw: str) -> dict:
     """Parse a JSON object from a model reply (tolerates stray code fences)."""
     return json.loads(strip_fences(raw))
+
+
+_CODE_BLOCK = re.compile(r"```(?:python)?\s*\n?(.*?)```", re.DOTALL)
+
+
+def extract_code(raw: str) -> str:
+    """Pull the first fenced code block from a model reply (or return the whole text)."""
+    m = _CODE_BLOCK.search(raw)
+    return (m.group(1) if m else raw).strip()
