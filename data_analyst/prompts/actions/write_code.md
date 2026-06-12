@@ -12,6 +12,9 @@ Rules:
 - `print()` every value the user should see; round floats sensibly.
 - For a chart: save it to `./out/` (e.g. `plt.savefig('out/<name>.png')`) and then
   `print()` that path.
+- For a TABLE result (more than ~2 rows with multiple columns — e.g. a groupby, crosstab,
+  or summary, or whenever the user asks for a "table" / "breakdown" / "by X"), save it to
+  `./out/<name>.csv` (e.g. `result.to_csv('out/<name>.csv')`) AND print a short preview.
 - Do NOT read or write any files other than saving a chart to ./out/.
 - Do NOT import anything outside pandas, numpy, matplotlib (and you usually need no imports
   at all, since pd / np / plt are already available).

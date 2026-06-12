@@ -3,16 +3,18 @@ import type { ChatMessage, Profile } from '../types'
 import { SUGGESTED_QUESTIONS, nextId } from '../mock'
 import { artifactUrl, sendChat } from '../api'
 import ProfileStrip from './ProfileStrip'
-import Chart from './Chart'
+import { ChartImage, DataTable } from './Artifacts'
 
 export default function ChatView({
   profile,
   sessionId,
+  initialMessages = [],
 }: {
   profile: Profile
   sessionId: string
+  initialMessages?: ChatMessage[]
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
@@ -37,7 +39,8 @@ export default function ChatView({
         id: pending.id,
         role: 'assistant',
         text: res.answer,
-        imageUrl: res.artifacts[0] ? artifactUrl(sessionId, res.artifacts[0]) : undefined,
+        images: res.images.map((n) => ({ name: n, url: artifactUrl(sessionId, n) })),
+        tables: res.tables,
       }
       setMessages((m) => m.map((msg) => (msg.id === pending.id ? reply : msg)))
     } catch (e) {
@@ -77,15 +80,13 @@ export default function ChatView({
                 </span>
               ) : (
                 <>
-                  {m.text}
-                  {m.imageUrl && (
-                    <img
-                      src={m.imageUrl}
-                      alt="chart"
-                      style={{ maxWidth: '100%', borderRadius: 8, marginTop: 10, display: 'block' }}
-                    />
-                  )}
-                  {m.chart && <Chart spec={m.chart} />}
+                  {m.text && <div className="answer-text">{m.text}</div>}
+                  {m.images?.map((img) => (
+                    <ChartImage key={img.name} name={img.name} url={img.url} />
+                  ))}
+                  {m.tables?.map((t) => (
+                    <DataTable key={t.name} table={t} downloadUrl={artifactUrl(sessionId, t.name)} />
+                  ))}
                 </>
               )}
             </div>
@@ -99,7 +100,7 @@ export default function ChatView({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && ask(input)}
-          placeholder="Ask about your data…  e.g. does contract type affect churn?"
+          placeholder="Ask about your data…  e.g. a table of churn rate by contract type"
         />
         <button className="btn" disabled={busy || !input.trim()} onClick={() => ask(input)}>
           Send

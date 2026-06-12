@@ -33,12 +33,22 @@ export interface ChartSpec {
   unit?: string
 }
 
+// A structured table parsed from a generated CSV (backend).
+export interface TableData {
+  name: string
+  columns: string[]
+  rows: (string | number | null)[][]
+  totalRows: number
+  truncated: boolean
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   text: string
   chart?: ChartSpec // structured chart (mock/report path)
-  imageUrl?: string // server-rendered chart PNG (matplotlib, from the backend)
+  images?: { name: string; url: string }[] // server-rendered chart PNGs (backend)
+  tables?: TableData[] // structured tables from generated CSVs (backend)
   pending?: boolean // assistant message still "thinking"
 }
 

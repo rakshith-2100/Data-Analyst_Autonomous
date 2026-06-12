@@ -1,10 +1,12 @@
 """chat.py — drive chat turns through the state machine.
 
-ChatSession adds conversation memory: it keeps a short rolling history and feeds the
-conversation summary (+ the previous code) into each turn, so follow-ups like "now show it
-as a pie" are understood. The sandbox is shared across turns but stateless per exec — the
-model recomputes from df, guided by the previous code (a persistent namespace is a later,
-optional step).
+ChatSession adds two things on top of run_machine:
+
+  * conversation memory — a short rolling history fed into each turn (so "now as a pie"
+    works);
+  * AWAIT resume — when a turn ends at AWAIT (the agent asked a clarifying question), the
+    next user message is folded back into the original question and re-run, so the
+    clarify -> answer loop closes across turns.
 
 answer() is a single stateless turn (used by isolated tests).
 """
@@ -21,7 +23,7 @@ from src.sandbox import Sandbox
 
 
 class ChatSession:
-    """One conversation: profile + sandbox + models + rolling history."""
+    """One conversation: profile + sandbox + models + rolling history + pending clarification."""
 
     def __init__(self, profile, sandbox, models, *, max_turns: int = 4, trace_path: str = ""):
         self.profile = profile
@@ -30,6 +32,8 @@ class ChatSession:
         self.max_turns = max_turns
         self.trace_path = trace_path
         self.history: list[dict] = []
+        # set while awaiting a clarification: {"original", "trail", "clarify_q"}
+        self.pending: dict | None = None
 
     def summary(self) -> str:
         turns = self.history[-self.max_turns:]
@@ -41,19 +45,40 @@ class ChatSession:
                 return t["code"]
         return ""
 
-    def ask(self, question):
+    def _question_for(self, message: str):
+        """Return (machine_question, original, trail). If awaiting a clarification, fold the
+        reply back into the original request; otherwise the message is the question."""
+        if not self.pending:
+            return message, message, []
+        original = self.pending["original"]
+        trail = self.pending["trail"] + [(self.pending["clarify_q"], message)]
+        clar = "\n".join(f'- you asked "{q}" -> user answered "{a}"' for q, a in trail)
+        question = (f"{original}\n\nClarifications:\n{clar}\n\n"
+                    f"Now answer the original request using these clarifications.")
+        return question, original, trail
+
+    def ask(self, message):
+        question, original, trail = self._question_for(message)
+
         ctx = Ctx(path="chat", profile=self.profile, question=question,
                   sandbox=self.sandbox, models=self.models,
                   summary=self.summary(), trace_path=self.trace_path)
         ctx.data["prev_code"] = self._last_code()
         end = asyncio.run(run_machine(State(name="CLASSIFY"), ctx))
         ans = ctx.data.get("answer") or end.data.get("reason", "")
-        self.history.append({"q": question, "a": ans, "code": ctx.data.get("code", "")})
+
+        if end.name == "AWAIT":
+            # the agent asked a (further) clarifying question — keep accumulating
+            self.pending = {"original": original, "trail": trail, "clarify_q": ans}
+        else:
+            self.pending = None
+
+        self.history.append({"q": message, "a": ans, "code": ctx.data.get("code", "")})
         return end, ctx
 
 
 def answer(question, *, profile, sandbox, models, trace_path=""):
-    """A single stateless turn (no memory)."""
+    """A single stateless turn (no memory, no AWAIT resume)."""
     ctx = Ctx(path="chat", profile=profile, question=question,
               sandbox=sandbox, models=models, trace_path=trace_path)
     end = asyncio.run(run_machine(State(name="CLASSIFY"), ctx))
@@ -67,12 +92,12 @@ if __name__ == "__main__":
     session = ChatSession(profile_csv(DEFAULT_CSV), Sandbox(), get_models())
 
     turns = [
-        "Show churn count by contract type as a bar chart.",
-        "now show it as a pie chart of the totals per contract",   # follow-up
-        "and what is the churn rate for month-to-month customers?",  # new question
+        "tell me about the data",                                  # vague -> ASK (AWAIT)
+        "the average monthly charge for churned vs retained",       # clarification -> resume -> answer
+        "now show it as a bar chart",                               # follow-up
     ]
     for q in turns:
         end, ctx = session.ask(q)
         arts = ctx.data.get("exec_result").artifacts if ctx.data.get("exec_result") else []
-        print(f"\nQ: {q}\n  state : {end.name}\n  answer: {ctx.data.get('answer')}"
+        print(f"\nUSER  : {q}\n  state : {end.name}\n  reply : {ctx.data.get('answer')}"
               f"\n  charts: {[Path(a).name for a in arts]}")

@@ -1,11 +1,16 @@
 import { useRef, useState } from 'react'
+import type { SessionSummary } from '../api'
 
 export default function UploadScreen({
   onUpload,
   onSample,
+  sessions,
+  onOpen,
 }: {
   onUpload: (file: File) => void
   onSample: () => void
+  sessions: SessionSummary[]
+  onOpen: (sid: string) => void
 }) {
   const [drag, setDrag] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -53,6 +58,21 @@ export default function UploadScreen({
       <button className="btn" onClick={onSample}>
         Try the Telco Churn sample
       </button>
+
+      {sessions.length > 0 && (
+        <div className="history">
+          <div className="history-title">Recent chats</div>
+          {sessions.map((s) => (
+            <button key={s.id} className="history-item" onClick={() => onOpen(s.id)}>
+              <span className="hi-file">{s.filename}</span>
+              <span className="hi-meta">
+                {s.message_count} msg{s.message_count === 1 ? '' : 's'}
+              </span>
+              <span className="hi-msg">{s.last_user_message ?? 'No messages yet'}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

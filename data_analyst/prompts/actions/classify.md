@@ -20,6 +20,9 @@ Rules:
 - Keep "reason" to a short phrase.
 - Use CONVERSATION SO FAR (if present) to interpret follow-ups: a message that continues the
   conversation (e.g. "now as a pie", "what about by gender?") is a "question".
+- Requests to chart / plot / visualize / graph the data — including follow-ups like "now show
+  it as a bar chart" or "show it as a pie" — are ALWAYS "question". The system computes charts
+  from the data; NEVER label a charting request "out_of_scope".
 
 Output ONLY this JSON object, nothing else:
 {"label": "question|unclear|refine|out_of_scope", "reason": "<short>"}
