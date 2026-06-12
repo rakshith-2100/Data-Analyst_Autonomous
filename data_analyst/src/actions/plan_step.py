@@ -28,8 +28,11 @@ def parse(raw):
 
 
 def run(state, ctx):
-    return agent_run(NAME, build_messages, parse, state, ctx,
+    plan = agent_run(NAME, build_messages, parse, state, ctx,
                      model_tier=MODEL_TIER, json_mode=True)
+    if getattr(ctx, "data", None) is not None:
+        ctx.data["plan"] = plan  # WRITE_CODE reads this
+    return plan
 
 
 def validate(output, ctx):

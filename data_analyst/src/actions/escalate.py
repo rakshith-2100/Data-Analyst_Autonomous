@@ -1,15 +1,19 @@
-"""ESCALATE [sys] — pick the next recovery rung (restrategize / strong model / bail). Plain code, no model.
+"""ESCALATE [sys] — no-op action; the recovery ladder lives in transitions/chat.py.
 
-Phase 5: implement. Stub for now.
+The action does nothing. The transition reads state.esc_level and picks the next rung
+(restrategize -> stronger model -> bail). It is kept as a real state so the ladder is
+explicit and shows up in the trace.
 """
+from __future__ import annotations
+
+from src.core import Verdict
+
 NAME = "ESCALATE"
 
 
 def run(state, ctx):
-    """pick the next recovery rung (restrategize / strong model / bail). Stub — returns None until Phase 5."""
     return None
 
 
 def validate(output, ctx):
-    """Stub — returns None until Phase 5."""
-    return None
+    return Verdict(ok=True, level="escalate")
