@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ChatMessage, Profile, ReportSection, Screen } from './types'
-import { buildReport } from './mock'
+import type { ChatMessage, Profile } from './types'
 import type { SessionSummary } from './api'
 import {
   artifactUrl,
@@ -11,139 +10,149 @@ import {
   loadMessages,
 } from './api'
 import UploadScreen from './components/UploadScreen'
-import ProcessingScreen from './components/ProcessingScreen'
-import ForkScreen from './components/ForkScreen'
 import ChatView from './components/ChatView'
-import ReportBuilder from './components/ReportBuilder'
-import ReportView from './components/ReportView'
+import Sidebar from './components/Sidebar'
 
-// Screen state machine. Chat (incl. history) is wired to the real backend; the report
-// fork is still the local mock (the backend report path isn't built yet).
-export default function App() {
-  const [screen, setScreen] = useState<Screen>('upload')
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [sections, setSections] = useState<ReportSection[]>([])
-  const [sessions, setSessions] = useState<SessionSummary[]>([])
-  const [initialMessages, setInitialMessages] = useState<ChatMessage[]>([])
+type Loaded = { sid: string; profile: Profile; messages: ChatMessage[] }
 
-  // Refresh the recent-chats list whenever we land on the upload screen.
+// Hash routing: "#/" is the landing/upload, "#/c/<sid>" is a conversation.
+// This gives every chat its own URL, so the browser back button works and a
+// conversation can be deep-linked or reopened from the sidebar.
+function useHashRoute(): string {
+  const [route, setRoute] = useState(() => window.location.hash.slice(1) || '/')
   useEffect(() => {
-    if (screen === 'upload') listSessions().then(setSessions).catch(() => setSessions([]))
-  }, [screen])
+    const on = () => setRoute(window.location.hash.slice(1) || '/')
+    window.addEventListener('hashchange', on)
+    return () => window.removeEventListener('hashchange', on)
+  }, [])
+  return route
+}
+const navigate = (to: string) => {
+  window.location.hash = to
+}
 
-  function reset() {
-    setProfile(null)
-    setSessionId(null)
-    setSections([])
-    setInitialMessages([])
-    setScreen('upload')
-  }
+export default function App() {
+  const route = useHashRoute()
+  const sid = route.startsWith('/c/') ? decodeURIComponent(route.slice(3)) : null
 
-  // New session (upload / sample): profile, then fork.
-  async function openSession(loader: Promise<{ sessionId: string; profile: Profile }>) {
-    setScreen('processing')
+  const [sessions, setSessions] = useState<SessionSummary[]>([])
+  const [loaded, setLoaded] = useState<Loaded | null>(null)
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [error, setError] = useState('')
+
+  const refreshSessions = () => listSessions().then(setSessions).catch(() => {})
+
+  useEffect(() => {
+    refreshSessions()
+  }, [])
+
+  // Whenever the URL points at a session we don't already hold, fetch its
+  // profile + messages. Newly created sessions are pre-loaded, so this skips.
+  useEffect(() => {
+    if (!sid || loaded?.sid === sid) {
+      if (!sid) setStatus('idle')
+      return
+    }
+    let cancelled = false
+    setStatus('loading')
+    ;(async () => {
+      try {
+        const [info, stored] = await Promise.all([getSessionInfo(sid), loadMessages(sid)])
+        if (cancelled) return
+        const messages: ChatMessage[] = stored.map((m, i) => ({
+          id: `${sid}-${i}`,
+          role: m.role,
+          text: m.text,
+          images: m.images.map((n) => ({ name: n, url: artifactUrl(sid, n) })),
+          tables: m.tables,
+        }))
+        setLoaded({ sid, profile: info.profile, messages })
+        setStatus('idle')
+      } catch (e) {
+        if (cancelled) return
+        setError((e as Error).message)
+        setStatus('error')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [sid, loaded?.sid])
+
+  // Create a session (upload or sample), then route into its conversation.
+  async function start(loader: Promise<{ sessionId: string; profile: Profile }>) {
+    setStatus('loading')
     try {
       const res = await loader
-      setSessionId(res.sessionId)
-      setProfile(res.profile)
-      setInitialMessages([])
-      setScreen('fork')
+      setLoaded({ sid: res.sessionId, profile: res.profile, messages: [] })
+      setStatus('idle')
+      await refreshSessions()
+      navigate(`/c/${res.sessionId}`)
     } catch (e) {
-      alert(`${(e as Error).message}\n\nIs the backend running?  (uvicorn src.api:app)`)
-      setScreen('upload')
+      setError((e as Error).message)
+      setStatus('error')
     }
   }
 
-  // Reopen a previous chat: load its profile + messages, jump straight into chat.
-  async function openPast(sid: string) {
-    setScreen('processing')
-    try {
-      const info = await getSessionInfo(sid)
-      const stored = await loadMessages(sid)
-      const msgs: ChatMessage[] = stored.map((m, i) => ({
-        id: `${sid}-${i}`,
-        role: m.role,
-        text: m.text,
-        images: m.images.map((n) => ({ name: n, url: artifactUrl(sid, n) })),
-        tables: m.tables,
-      }))
-      setProfile(info.profile)
-      setSessionId(sid)
-      setInitialMessages(msgs)
-      setScreen('chat')
-    } catch (e) {
-      alert(`${(e as Error).message}`)
-      setScreen('upload')
-    }
-  }
-
-  const showBack = screen !== 'upload' && screen !== 'processing'
+  const showChat = !!sid && loaded?.sid === sid
 
   return (
-    <div className="app">
-      <div className="topbar">
-        <div className="brand">
-          <span className="dot" />
-          CSV Data Analyst <small>· prototype</small>
+    <div className="shell">
+      <Sidebar
+        sessions={sessions}
+        activeSid={sid}
+        onNew={() => navigate('/')}
+        onOpen={(s) => navigate(`/c/${s}`)}
+        onBrand={() => navigate('/')}
+      />
+
+      <main className="main">
+        <div className="main-head">
+          {showChat && loaded && (
+            <span className="pill">
+              <span className="file">{loaded.profile.fileName}</span> loaded
+            </span>
+          )}
         </div>
-        <div className="spacer" />
-        {profile && screen !== 'upload' && screen !== 'processing' && (
-          <span className="pill">
-            <span className="file">{profile.fileName}</span> loaded
-          </span>
-        )}
-        {showBack && (
-          <button className="btn-ghost" onClick={() => setScreen('fork')}>
-            ← Menu
-          </button>
-        )}
-        {screen !== 'upload' && (
-          <button className="btn-ghost" onClick={reset}>
-            New file
-          </button>
-        )}
-      </div>
 
-      {screen === 'upload' && (
-        <UploadScreen
-          onUpload={(file) => openSession(createSession(file))}
-          onSample={() => openSession(createSampleSession())}
-          sessions={sessions}
-          onOpen={openPast}
-        />
-      )}
+        <div className="main-body">
+          {status === 'loading' && (
+            <div className="center-stage">
+              <div className="loader">Analyzing…</div>
+            </div>
+          )}
 
-      {screen === 'processing' && <ProcessingScreen />}
+          {status === 'error' && (
+            <div className="center-stage fade-in">
+              <h1 style={{ fontSize: 26 }}>Something went wrong</h1>
+              <p className="sub">⚠ {error}</p>
+              <p className="sub" style={{ fontSize: 13, marginTop: -8 }}>
+                Is the backend running? (uvicorn src.api:app)
+              </p>
+              <button className="btn" onClick={() => navigate('/')}>
+                Back to start
+              </button>
+            </div>
+          )}
 
-      {screen === 'fork' && profile && (
-        <ForkScreen
-          profile={profile}
-          onChat={() => setScreen('chat')}
-          onReport={() => setScreen('report-builder')}
-        />
-      )}
+          {status === 'idle' && !sid && (
+            <UploadScreen
+              onUpload={(file) => start(createSession(file))}
+              onSample={() => start(createSampleSession())}
+            />
+          )}
 
-      {screen === 'chat' && profile && sessionId && (
-        <ChatView
-          key={sessionId}
-          profile={profile}
-          sessionId={sessionId}
-          initialMessages={initialMessages}
-        />
-      )}
-
-      {screen === 'report-builder' && profile && (
-        <ReportBuilder
-          profile={profile}
-          onGenerate={(items) => {
-            setSections(buildReport(items))
-            setScreen('report')
-          }}
-        />
-      )}
-
-      {screen === 'report' && profile && <ReportView profile={profile} sections={sections} />}
+          {status === 'idle' && showChat && loaded && (
+            <ChatView
+              key={loaded.sid}
+              profile={loaded.profile}
+              sessionId={loaded.sid}
+              initialMessages={loaded.messages}
+              onSent={refreshSessions}
+            />
+          )}
+        </div>
+      </main>
     </div>
   )
 }

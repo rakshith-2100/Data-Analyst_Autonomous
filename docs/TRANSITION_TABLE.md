@@ -8,10 +8,15 @@ never asked "what should I do next" — that answer lives here.
 > **Action** does the work (`actions/`). **Validation** judges the work (`validators/`).
 > **Transition** (this file) decides where to go next. Three different things.
 
+> **Status.** The **chat table** below is implemented and live (`transitions/chat.py`).
+> The **report path** and the per-task sub-machine are the **designed** target —
+> `transitions/report.py`, `transitions/task.py`, and the report actions are still stubs.
+> See [architecture.md](architecture.md) for the implemented-vs-planned split.
+
 Legend:
 - `[agent]` = a prompt-driven model call · `[sys]` = plain code, **zero tokens**
 - Counters are **named per state** (`plan`/`code`/`repair`/`reduce`/`check`/`compose`),
-  not one blurred `tries`. `N` = the repair cap (small, e.g. 2–3).
+  not one blurred `tries`. `N` = the repair cap (`REPAIR_CAP = 3` in `transitions/chat.py`).
 - Validation level = the cheapest check that can catch *this* action's failure mode
 
 ---
@@ -41,12 +46,13 @@ State.tier      ∈ {cheap, strong}                                # ESCALATE ma
 
 ## Chat path  (`transitions/chat.py`)
 
-One persistent-state loop. The sandbox namespace survives across turns, so a follow-up
-like "now show it as a pie" can build on the previous result.
+One loop per turn, with rolling conversation memory. Follow-ups like "now show it as a
+pie" work today via the rolling `summary` plus the previous cell carried in `ctx.data`
+(`prev_code`); a *persistent sandbox namespace* across turns is a planned improvement.
 
 | State | Action | Validation | Transition (verdict → next state) |
 |---|---|---|---|
-| `CLASSIFY` | `[agent]` label the message | schema (enum) | `question`→`PLAN_STEP` · `unclear`→`ASK` · `refine`→`REFINE_REPORT` · `out_of_scope`→`RESPOND` |
+| `CLASSIFY` | `[agent]` label the message | schema (enum) | `question`→`PLAN_STEP` · `unclear`→`ASK` · `refine`→`RESPOND` *(until the report path is wired; target: `REFINE_REPORT`)* · `out_of_scope`→`RESPOND` |
 | `PLAN_STEP` | `[agent]` pick columns + op, 1-line plan, **no code** | planning | ok→`WRITE_CODE` · bad column & `plan<2`→`PLAN_STEP` · ambiguous→`ASK` |
 | `WRITE_CODE` | `[agent]` one pandas/matplotlib cell from the plan | syntax | compiles→`EXECUTE` · else & `code<2`→`WRITE_CODE` |
 | `EXECUTE` | `[sys]` run cell in the sandbox | runtime (**classifies** `error_kind` + `signature`) | clean→`CHECK` *(reset repair/reduce)* · **`signature==last`→`ESCALATE`** *(feedback didn't land)* · `error_kind=RESOURCE` & `reduce<2`→`REDUCE` · other error & `repair<N`→`ENRICH` · `repair≥N`→`ESCALATE` |
@@ -61,7 +67,9 @@ like "now show it as a pie" can build on the previous result.
 | `DELIVER` | `[sys]` stream answer + charts to the user | — | → `DONE`; next message → `CLASSIFY` |
 | `FAIL` | `[sys]` honest "couldn't compute X" message | — | → `DONE` |
 
-**Terminal states:** `DONE`, `FAIL`.
+**Terminal states:** `DONE`, `FAIL`, and `AWAIT` — the per-turn terminal that `ASK` routes
+to. On `AWAIT` the server hands control back to the user and resumes at `CLASSIFY` (with the
+reply folded into the original question) on the next message.
 
 ### The `EXECUTE → REPAIR` split (why it is four states, not one)
 
@@ -96,6 +104,11 @@ reach `ESCALATE`.)
 ---
 
 ## Report path  (`transitions/report.py`)
+
+> **Planned — not yet wired.** `transitions/report.py` / `transitions/task.py` and the
+> report actions are stubs today. The table below is the intended design; it reuses the
+> chat actions and the same `run_machine`, so building it is filling in these rows, not
+> changing the engine.
 
 Same engine, second entry point. `PLAN_REPORT` mirrors `PLAN_STEP` (same planning
 validation, same retry-on-bad-column) but emits **N** task specs instead of one. Each
@@ -141,13 +154,13 @@ The orchestrator is **generic** — it knows nothing about churn, charts, or any
 state name. It just drives the table:
 
 ```python
-state = State(name="CLASSIFY", data=...)
+state = State(name="CLASSIFY")
 while not terminal(state):
     action  = ACTIONS[state.name]                                   # actions/
-    output  = action.run(state, ctx)                                # prompt or [sys] code
+    output  = await _maybe_await(action.run(state, ctx))            # prompt or [sys] code
     verdict = action.validate(output, ctx)                          # validators/, level per action
+    trace(ctx, state, action.NAME, verdict, output)                 # logs/ + trace — BEFORE routing
     state   = TRANSITIONS[ctx.path][state.name](verdict, state, output)  # transitions/  (this file)
-    trace(state, action, verdict)                                   # traces/<session>.jsonl
 ```
 
 Adding a capability = add one file to `actions/`, register it, add one row above.

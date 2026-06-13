@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChatMessage, Profile } from '../types'
-import { SUGGESTED_QUESTIONS, nextId } from '../mock'
+import { nextId, suggestQuestions } from '../suggest'
 import { artifactUrl, sendChat } from '../api'
 import ProfileStrip from './ProfileStrip'
 import { ChartImage, DataTable } from './Artifacts'
@@ -9,11 +9,14 @@ export default function ChatView({
   profile,
   sessionId,
   initialMessages = [],
+  onSent,
 }: {
   profile: Profile
   sessionId: string
   initialMessages?: ChatMessage[]
+  onSent?: () => void
 }) {
+  const suggestions = suggestQuestions(profile)
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -52,6 +55,7 @@ export default function ChatView({
       setMessages((m) => m.map((msg) => (msg.id === pending.id ? err : msg)))
     } finally {
       setBusy(false)
+      onSent?.()
     }
   }
 
@@ -61,12 +65,16 @@ export default function ChatView({
 
       <div className="messages">
         {messages.length === 0 && (
-          <div className="starter-row">
-            {SUGGESTED_QUESTIONS.map((q) => (
-              <button key={q} className="starter" onClick={() => ask(q)}>
-                {q}
-              </button>
-            ))}
+          <div className="chat-empty">
+            <h2>What do you want to know about {profile.fileName}?</h2>
+            <p>Ask in plain language — pick a starter or type your own.</p>
+            <div className="starter-row">
+              {suggestions.map((q) => (
+                <button key={q} className="starter" onClick={() => ask(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -96,15 +104,33 @@ export default function ChatView({
       </div>
 
       <div className="composer">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && ask(input)}
-          placeholder="Ask about your data…  e.g. a table of churn rate by contract type"
-        />
-        <button className="btn" disabled={busy || !input.trim()} onClick={() => ask(input)}>
-          Send
-        </button>
+        <div className="composer-field">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && ask(input)}
+            placeholder="Ask about your data…  e.g. an average by category, or a bar chart"
+          />
+          <button
+            className="send-btn"
+            disabled={busy || !input.trim()}
+            onClick={() => ask(input)}
+            aria-label="Send"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 19V5M12 5l-6 6M12 5l6 6"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
+        <div className="composer-hint">
+          Answers are computed from your data with Python — charts and tables included.
+        </div>
       </div>
     </div>
   )
