@@ -74,3 +74,6 @@ pnpm-debug.log*
 *~
 .DS_Store
 Thumbs.db
+
+# Internal security notes — revisit before exposing the app publicly.
+SECURITY.md

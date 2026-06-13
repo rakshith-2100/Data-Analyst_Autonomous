@@ -1,0 +1,19 @@
+# One-box deploy: backend (FastAPI) + web (Caddy serving the SPA and proxying /api).
+# Bring up with:  docker compose up -d --build
+services:
+  backend:
+    build: ./data_analyst
+    env_file: ./data_analyst/.env          # must contain OPENAI_API_KEY
+    volumes:
+      - ./data_analyst/data:/app/data       # SQLite db + chart artifacts persist here
+    expose:
+      - "8000"                              # internal only; reached via the web service
+    restart: unless-stopped
+
+  web:
+    build: ./app
+    ports:
+      - "80:80"                             # public entrypoint
+    depends_on:
+      - backend
+    restart: unless-stopped

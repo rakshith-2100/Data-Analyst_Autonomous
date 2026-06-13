@@ -1,0 +1,15 @@
+# Serve everything on port 80 over plain HTTP (raw-IP deploy, no domain/cert).
+:80 {
+	# /api/* -> backend, with the /api prefix stripped.
+	#   browser GET /api/sessions  ->  backend GET /sessions
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else -> the built SPA (client-side routing falls back to index.html).
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
