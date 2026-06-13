@@ -2,8 +2,10 @@
 :80 {
 	# /api/* -> backend, with the /api prefix stripped.
 	#   browser GET /api/sessions  ->  backend GET /sessions
+	# Upstream is configurable: docker-compose uses the service name (backend:8000);
+	# ECS Fargate runs both containers in one task, so they talk over localhost:8000.
 	handle_path /api/* {
-		reverse_proxy backend:8000
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
 	}
 
 	# Everything else -> the built SPA (client-side routing falls back to index.html).
